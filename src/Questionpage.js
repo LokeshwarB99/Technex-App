@@ -17,10 +17,8 @@ const Questionpage = () => {
   const [markedForReview, setMarkedForReview] = useState([]);
   const [answeredQuestions, setAnsweredQuestions] = useState([]);
   const [timer, setTimer] = useState(3600); // Timer set to 60 minutes (3600 seconds)
-  const [t, setT] = useState(0);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
   const [firstTimeStart, setFirstTimeStart] = useState(false);
   const [voluntarySubmission, setVoluntarySubmission] = useState(false); // Track voluntary submission
   const [status, setStatus] = useState(1);
@@ -41,16 +39,16 @@ const Questionpage = () => {
         const questionData = await axios.get(
           `http://localhost:5000/get_question/${id}`
         );
-        const duration = await axios.get(
-          `http://localhost:5000/get-test-details/${id}`
-        );
+
+        const duration = questionData.data.duration;
         const shuffledQuestions = shuffleArray(questionData.data.questions);
         setQuestion(shuffledQuestions);
         setTotalQuestion(shuffledQuestions.length);
         setSelectedAnswers(Array(shuffledQuestions.length).fill([]));
-        // console.log(duration.data);
-        setTimer(parseInt(duration.data) * 60);
-        setTotaltime(parseInt(duration.data) * 60);
+        console.log(JSON.stringify(questionData.data.questions));
+
+        setTimer(Math.floor(parseInt(duration)));
+        setTotaltime(Math.floor(parseInt(duration)));
       } catch (err) {
         console.log(err);
       }
@@ -75,7 +73,7 @@ const Questionpage = () => {
 
     if (isFillInTheBlank) {
       updatedSelectedAnswers[questionId] = [optionId];
-    } else if (question[questionId].type === "Multiple Select") {
+    } else if (question[questionId].type === "msq") {
       if (updatedSelectedAnswers[questionId]) {
         if (updatedSelectedAnswers[questionId].includes(optionId)) {
           updatedSelectedAnswers[questionId] = updatedSelectedAnswers[
@@ -139,63 +137,6 @@ const Questionpage = () => {
     }
   }, [timer, hasStarted, isSubmitted]);
 
-  // const handleSubmit = (voluntary = true) => {
-  //   if (!isSubmitted) {
-  //     setIsSubmitted(true);
-  //     if (voluntary) {
-  //       setVoluntarySubmission(true);
-  //     }
-  //     // const totalTime = parseInt(timer); // Total time in seconds
-  //     const remainingTime = totaltime - timer; // Time user spent on the test in seconds
-
-  //     let minutes = Math.floor(remainingTime / 60);
-  //     let seconds = remainingTime % 60;
-
-  //     const correctAnswersCount = question.filter((question, index) => {
-  //       if (Array.isArray(question.answer)) {
-  //         if (question.type === "Multiple Select") {
-  //           return (
-  //             question.answer.sort().join(",") ===
-  //             (selectedAnswers[index] || []).sort().join(",")
-  //           );
-  //         } else if (question.type === "Fill Up") {
-  //           return question.answer[0] === selectedAnswers[index]?.[0];
-  //         } else {
-  //           return question.answer.includes(selectedAnswers[index]?.[0]);
-  //         }
-  //       } else {
-  //         return false;
-  //       }
-  //     }).length;
-
-  //     const scorePercentage = (correctAnswersCount / question.length) * 100;
-  //     alert(
-  //       `  Your score: ${correctAnswersCount}/${
-  //         question.length
-  //       } (${scorePercentage.toFixed(2)}%)`
-  //     );
-  //     const score1 = {
-  //       score: correctAnswersCount,
-  //       complete: `${minutes}:${seconds.toString().padStart(2, "0")}`,
-  //       status: status,
-  //     };
-  //     console.log(userstate.email)
-  //     axios
-  //       .post(`http://localhost:5000/addscore/${id}/${userstate.email}`, {
-  //         status: score1.status,
-  //         score: score1.score,
-  //         complete: score1.complete,
-  //       })
-  //       .then((res) => {
-  //         if (res.data === "done") {
-  //           console.log(score1);
-  //           generateResponseSheet();
-  //           navigate("/");
-  //         }
-  //       })
-  //       .catch();
-  //   }
-  // };
   const handleSubmit = (voluntary = true) => {
     if (!isSubmitted) {
       setIsSubmitted(true);
@@ -212,9 +153,9 @@ const Questionpage = () => {
 
       question.forEach((question, index) => {
         const userAnswer = selectedAnswers[index] || [];
-        if (question.type === "Multiple Select") {
-          // Multiple Select: 2 marks for correct, -2/3 for wrong answer
-          totalPossibleMarks += 2; // Each Multiple Select question is worth 2 marks
+        if (question.type === "msq") {
+          // msq: 2 marks for correct, -2/3 for wrong answer
+          totalPossibleMarks += 2; // Each msq question is worth 2 marks
           if (
             question.answer.sort().join(",") === userAnswer.sort().join(",")
           ) {
@@ -222,8 +163,8 @@ const Questionpage = () => {
           } else if (userAnswer.length > 0) {
             score -= 2 / 3;
           }
-        } else if (question.type === "Fill Up") {
-          // Assuming Fill Up questions are worth 1 mark each for simplicity
+        } else if (question.type === "fillup") {
+          // Assuming fillup questions are worth 1 mark each for simplicity
           totalPossibleMarks += 1;
           if (question.answer[0] === userAnswer[0]) {
             score += 1;
@@ -297,16 +238,6 @@ const Questionpage = () => {
     }
   }
 
-  function exitFullScreen() {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch((err) => {
-        console.error(
-          ` Error attempting to exit full-screen mode: ${err.message} (${err.name})`
-        );
-      });
-    }
-  }
-
   function handleStartTest() {
     setHasStarted(true);
     enterFullScreen();
@@ -320,7 +251,6 @@ const Questionpage = () => {
       if (!document.fullscreenElement) {
         setIsFullScreen(false);
         if (hasStarted && !voluntarySubmission) {
-          setShowAlert(true);
           handleSubmit(true);
         }
       } else {
@@ -510,9 +440,16 @@ const Questionpage = () => {
                     }}
                   >
                     {question.question}
-                    {question.image_url && (
+                    <p className="text small">
+                      (
+                      {question.mark === 1
+                        ? "1 Mark"
+                        : `${question.mark} Marks`}
+                      )
+                    </p>
+                    {question.img_url && (
                       <img
-                        src={question.image_url}
+                        src={question.img_url}
                         alt={`Question ${index + 1}`}
                         className="question-image"
                         style={{
@@ -530,7 +467,7 @@ const Questionpage = () => {
                     )}
                   </h2>
 
-                  {question.type === "Fill Up" ? (
+                  {question.type === "fillup" ? (
                     <div
                       style={{
                         display: "flex",
@@ -573,7 +510,7 @@ const Questionpage = () => {
                             borderRadius: "8px",
                           }}
                         >
-                          {question.type === "Multiple Select" ? (
+                          {question.type === "msq" ? (
                             <label
                               style={{
                                 marginRight: "10px",

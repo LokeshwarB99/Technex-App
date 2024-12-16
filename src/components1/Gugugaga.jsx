@@ -38,7 +38,7 @@ const Gugugaga = () => {
       );
 
       setUploadResponse(response.data);
-
+      // link will be available at -> uploadResponse.data.url
       // Log the response data
       console.log("Upload Response:", response.data);
     } catch (error) {
@@ -57,6 +57,7 @@ const Gugugaga = () => {
       {uploadResponse && (
         <div>
           <h2>Upload Response:</h2>
+          <h5>{uploadResponse.data.url}</h5>
           <pre>{JSON.stringify(uploadResponse, null, 2)}</pre>
           {uploadResponse.data && (
             <div>
